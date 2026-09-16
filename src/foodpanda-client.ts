@@ -188,10 +188,26 @@ export class FoodpandaClient {
    * Single choke point for HTTP. Either a plain fetch, or a request issued from
    * the persistent browser context (which carries PerimeterX + login cookies).
    */
+  /**
+   * PerimeterX also rate-limits the API host: a burst of calls gets challenged even from a
+   * warm session. Space requests out (FOODPANDA_MIN_INTERVAL_MS) so a normal ordering
+   * sequence — a search or two, menus, cart — stays under the radar.
+   */
+  private lastRequestAt = 0;
+
+  private async throttle(): Promise<void> {
+    const min = parseInt(process.env.FOODPANDA_MIN_INTERVAL_MS || "2000", 10);
+    if (!Number.isFinite(min) || min <= 0) return;
+    const wait = this.lastRequestAt + min - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    this.lastRequestAt = Date.now();
+  }
+
   private async httpRequest(
     url: string,
     init: { method?: string; headers?: Record<string, string>; body?: string } = {}
   ): Promise<{ status: number; ok: boolean; text: string }> {
+    await this.throttle();
     const cfg = getRegionConfig();
     if (!cfg.browserTransport) {
       const res = await fetch(url, {
@@ -204,7 +220,13 @@ export class FoodpandaClient {
     }
     const transport = browserTransport();
     await transport.warmUp();
-    return transport.fetch(url, init);
+    // GETs (the REST endpoints: vendor details, menus, addresses) must come from the page —
+    // that is the only origin PerimeterX accepts them from. POSTs (GraphQL search) work from
+    // the context's request API. Override with FOODPANDA_FETCH_MODE=page|context.
+    const mode = (process.env.FOODPANDA_FETCH_MODE || "auto").toLowerCase();
+    const method = (init.method || "GET").toUpperCase();
+    const usePage = mode === "page" || (mode === "auto" && method === "GET");
+    return usePage ? transport.fetchViaPage(url, init) : transport.fetch(url, init);
   }
 
   /** Turn the PerimeterX wall into an actionable error instead of a bogus 401. */
@@ -221,19 +243,69 @@ export class FoodpandaClient {
     }
   }
 
+  /**
+   * PerimeterX can re-challenge mid-session after a burst of calls. When that happens the
+   * profile is poisoned, so the only way back is a clean identity: wipe, re-warm, retry once.
+   */
+  private async withPerimeterXRetry<T>(operation: () => Promise<T>): Promise<T> {
+    const baseMs = parseInt(process.env.FOODPANDA_PX_BACKOFF_MS || "45000", 10);
+    const maxAttempts = 3;
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await operation();
+      } catch (err) {
+        lastError = err;
+        if (!/PerimeterX blocked/.test((err as Error).message)) throw err;
+        if (attempt === maxAttempts) break;
+
+        // The escalation is time-based: a burst of calls gets challenged even from a warm
+        // session, and hammering it re-trips the rule. Wait longer each time, and come back
+        // with a clean browser identity.
+        const pauseMs = baseMs * attempt;
+        console.error(
+          `foodpanda-mcp: PerimeterX re-challenged — waiting ${Math.round(pauseMs / 1000)}s ` +
+            `(attempt ${attempt}/${maxAttempts - 1}), then resetting the profile and retrying`
+        );
+        await new Promise((r) => setTimeout(r, pauseMs));
+        const transport = browserTransport();
+        await transport.resetProfile();
+        await transport.warmUp(3);
+      }
+    }
+    throw lastError;
+  }
+
   private async restRequest<T>(
+    path: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    return this.withPerimeterXRetry(() => this.restRequestOnce<T>(path, options));
+  }
+
+  private async graphqlRequest<T>(body: object, displayContext: string = "SEARCH"): Promise<T> {
+    return this.withPerimeterXRetry(() =>
+      this.graphqlRequestOnce<T>(body, displayContext)
+    );
+  }
+
+  private async restRequestOnce<T>(
     path: string,
     options: RequestInit = {}
   ): Promise<T> {
     const cfg = getRegionConfig();
     const url = `${cfg.apiBase}${path}`;
+    const method = typeof options.method === "string" ? options.method : "GET";
     const result = await this.httpRequest(url, {
-      method: typeof options.method === "string" ? options.method : "GET",
+      method,
       body: typeof options.body === "string" ? options.body : undefined,
       headers: {
         ...this.commonHeaders(),
         "x-pd-language-id": String(cfg.languageId),
-        "Content-Type": "application/json",
+        // Never set Content-Type on a GET: it turns the request into a CORS preflight, and
+        // the storefront's API rejects our OPTIONS ("Failed to fetch" inside the page).
+        ...(method === "GET" ? {} : { "Content-Type": "application/json" }),
         ...((options.headers as Record<string, string>) || {}),
       },
     });
@@ -253,7 +325,7 @@ export class FoodpandaClient {
     return JSON.parse(result.text) as T;
   }
 
-  private async graphqlRequest<T>(body: object, displayContext: string = "SEARCH"): Promise<T> {
+  private async graphqlRequestOnce<T>(body: object, displayContext: string = "SEARCH"): Promise<T> {
     const cfg = getRegionConfig();
     const url = `${cfg.apiBase}/graphql`;
     const result = await this.httpRequest(url, {

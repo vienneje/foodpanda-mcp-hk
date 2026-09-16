@@ -53,6 +53,7 @@ export class BrowserTransport {
   private warmed = false;
   private xvfb: ChildProcess | null = null;
   private display: string | null = null;
+  private page: any = null;
 
   /**
    * A headed browser is what gets past PerimeterX, but a server has no screen. Start a
@@ -178,6 +179,7 @@ export class BrowserTransport {
         lastTitle = await page.title().catch(() => "");
         if (!/denied|px-captcha/i.test(lastTitle)) {
           this.warmed = true;
+          this.page = page; // keep it: requests are issued from this page's context
           return;
         }
       } finally {
@@ -212,6 +214,49 @@ export class BrowserTransport {
     }
   }
 
+  /**
+   * Issue the request from inside the warm storefront page rather than from the context's
+   * request API. Page-origin fetches carry Origin/Referer, sec-fetch-* and the cookies the
+   * page itself acquired — which is what PerimeterX expects on the REST endpoints that it
+   * rejects when asked by an out-of-page client.
+   */
+  async fetchViaPage(
+    url: string,
+    init: { method?: string; headers?: Record<string, string>; body?: string } = {}
+  ): Promise<TransportResponse> {
+    const cfg = getRegionConfig();
+    const ctx = await this.getContext();
+    let page = this.page || ctx.pages()[0] || (await ctx.newPage());
+    this.page = page;
+
+    const current = page.url();
+    if (!current || current === "about:blank") {
+      await page.goto(cfg.webHost, { waitUntil: "domcontentloaded", timeout: 60000 });
+    }
+
+    return page.evaluate(
+      async (args: { url: string; method: string; headers: Record<string, string>; body?: string }) => {
+        const response = await fetch(args.url, {
+          method: args.method,
+          headers: args.headers,
+          body: args.body,
+          credentials: "include",
+        });
+        return {
+          status: response.status,
+          ok: response.ok,
+          text: await response.text(),
+        };
+      },
+      {
+        url,
+        method: init.method || "GET",
+        headers: init.headers || {},
+        body: init.body,
+      }
+    );
+  }
+
   async fetch(
     url: string,
     init: { method?: string; headers?: Record<string, string>; body?: string } = {}
@@ -232,6 +277,7 @@ export class BrowserTransport {
     if (this.context) await this.context.close().catch(() => {});
     this.context = null;
     this.warmed = false;
+    this.page = null;
     if (this.xvfb) {
       this.xvfb.kill();
       this.xvfb = null;

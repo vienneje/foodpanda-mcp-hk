@@ -210,6 +210,17 @@ So the transport runs headed Chromium and starts its own `Xvfb` when `DISPLAY` i
 without a session token (verified: a live HK search returned real restaurants). Only the cart and
 checkout need you to log in — see [Logging in](#logging-in).
 
+One more asymmetry, measured the hard way: the **GraphQL** endpoint (`/graphql`, a POST) answers
+requests made from the browser context, but the **REST** endpoints (`/api/v5/vendors/...`, a GET)
+are only accepted when the request is issued *from the storefront page itself* — and they must not
+carry `Content-Type`, which would turn a GET into a CORS preflight the API rejects (`Failed to
+fetch` inside the page). The transport therefore picks the origin by method: GET from the page,
+POST from the context. `FOODPANDA_FETCH_MODE=page|context` forces either one.
+
+Rate limiting is real too: a burst of calls (seven searches back to back) gets the API challenged
+even from a warm session. Requests are spaced by `FOODPANDA_MIN_INTERVAL_MS` (default 2s), and a
+challenge triggers a back-off (45s, then 90s), a profile reset and a retry.
+
 A token will not rescue a blocked browser, and a headed browser will not rescue a hardened
 datacenter IP forever: if you keep getting challenged, set `FOODPANDA_PROXY` to egress elsewhere
 (`socks5://`, `http://`, or `http://user:pass@host:port` — applied to the browser, hence to every
