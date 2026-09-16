@@ -50,6 +50,11 @@ export interface RegionConfig {
    * network foodpanda serves when the machine running the server is blocked.
    */
   proxy: string;
+  /**
+   * Start a private Xvfb when a headed browser is needed and DISPLAY is unset.
+   * A headed browser is what clears PerimeterX; a server has no screen.
+   */
+  autoXvfb: boolean;
 }
 
 /**
@@ -133,6 +138,7 @@ export function loadRegionConfig(): RegionConfig {
         : process.env.FOODPANDA_BROWSER_CHANNEL.trim(),
     browserExecutable: (process.env.FOODPANDA_BROWSER_EXECUTABLE || "").trim(),
     proxy: (process.env.FOODPANDA_PROXY || "").trim(),
+    autoXvfb: envFlag("FOODPANDA_XVFB", true),
   };
 }
 

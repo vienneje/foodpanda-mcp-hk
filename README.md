@@ -29,10 +29,11 @@ environment variables.
 
 - Node.js 20 or newer
 - `npx playwright install chromium` (the transport and the login flow both need a browser)
+- **Xvfb** on a headless machine — the browser must run *headed* to clear PerimeterX, and the
+  transport starts its own Xvfb when `DISPLAY` is unset (`apt-get install xvfb`)
 - A foodpanda account in the region you configure, **with the delivery address you intend to use
   already saved in that account** (checkout picks the saved address nearest your configured
   coordinates)
-- A network foodpanda serves (see [Known limitations](#known-limitations))
 
 ## Install
 
@@ -125,6 +126,7 @@ foodpanda-mcp: region=foodpanda Hong Kong api=https://hk.fd-api.com web=https://
 | `FOODPANDA_BROWSER_CHANNEL` | `chromium` | Chromium build to drive; empty = Playwright default (headless shell) |
 | `FOODPANDA_BROWSER_EXECUTABLE` | unset | absolute path to a browser binary to drive instead (system Chrome/Chromium, or an existing Playwright build) |
 | `FOODPANDA_PROXY` | unset | proxy the browser egresses through: `socks5://host:port`, `http://host:port`, or `http://user:pass@host:port` |
+| `FOODPANDA_XVFB` | `1` | start a private Xvfb when a headed browser is needed and `DISPLAY` is unset |
 | `FOODPANDA_STATE_DIR` | `~/.foodpanda-mcp` | token + browser profile location |
 | `FOODPANDA_SESSION_TOKEN` | unset | JWT, if you prefer to supply one instead of logging in |
 
@@ -184,31 +186,34 @@ cart and checkout) use plain REST endpoints and need no hashes.
 | `place_order` | submits the order (after your confirmation) |
 | `refresh_token` | browser login, captures and persists the session token |
 
-## Running from a blocked network
+## Getting past PerimeterX — the part that matters
 
-PerimeterX judges the **network**, so a server sitting on an IP foodpanda dislikes will be challenged
-no matter how good its credentials are. Two ways out:
+`*.fd-api.com` sits behind PerimeterX. What actually decides whether you get through is **not the
+country you are in**: it is whether the browser looks automated.
 
-1. **Run the server where the network is fine** — a machine in the country you order in, on an
-   ordinary consumer connection. This is the intended setup: the login browser is visible, so you can
-   complete CAPTCHA/OTP yourself.
-2. **Give the server a route through an unblocked network.** Because every API call goes through the
-   browser context, pointing `FOODPANDA_PROXY` at a proxy is enough to move all traffic:
+- A plain `fetch()`, curl, or a **headless** browser (including Playwright's
+  `chromium-headless-shell`) is challenged: `403` with a `px-captcha` payload, or a page titled
+  *"Access to this page has been denied"*.
+- The **same server, same IP**, driving a **headed** Chromium on a virtual display, gets through.
 
-   ```bash
-   # on a machine whose network reaches foodpanda (e.g. your laptop), share it as a SOCKS proxy
-   ssh -N -D 1080 user@the-server-running-the-mcp
-   # then, in the MCP env:
-   FOODPANDA_PROXY=socks5://127.0.0.1:1080
-   ```
+So the transport runs headed Chromium and starts its own `Xvfb` when `DISPLAY` is unset
+(`FOODPANDA_XVFB`, on by default) — a server needs no screen. Two consequences worth knowing:
 
-   The browser then exits through the other machine's connection and the challenge is normally not
-   raised. Note that a proxy fixes the *transport*, not the *login*: whichever way you route, the
-   session token still has to be produced by a browser where you typed your credentials, so
-   `refresh_token` remains an interactive step.
+- A challenge verdict is **sticky**: an unsolved visit leaves PX cookies that mark the profile as
+  suspicious and every later launch from it is challenged again. `warmUp()` therefore wipes the
+  browser profile and retries with a clean identity (3 attempts), which is what makes the first
+  call succeed where a naive retry loop would keep failing.
+- Navigation itself can be re-challenged, so the transport warms up once and then talks to the API
+  from that same context instead of reloading the storefront.
 
-A token on its own will not rescue a blocked network — a request carrying a valid bearer still gets
-`403 px-captcha` from a challenged IP.
+**Browsing needs no account.** Search, menus and vendor details are public, and the server works
+without a session token (verified: a live HK search returned real restaurants). Only the cart and
+checkout need you to log in — see [Logging in](#logging-in).
+
+A token will not rescue a blocked browser, and a headed browser will not rescue a hardened
+datacenter IP forever: if you keep getting challenged, set `FOODPANDA_PROXY` to egress elsewhere
+(`socks5://`, `http://`, or `http://user:pass@host:port` — applied to the browser, hence to every
+API call).
 
 ## Order safety
 
@@ -219,14 +224,9 @@ agent uses — the server cannot enforce it by itself.
 
 ## Known limitations
 
-1. **PerimeterX.** `*.fd-api.com` is fronted by a bot wall. Plain `fetch()` calls — even with the
-   public `x-fp-api-key: volo`, browser-like headers and a bearer token — get `403` plus a px-captcha
-   payload, and a fresh browser lands on *"Access to this page has been denied"* when the source
-   network is not one foodpanda serves. This fork therefore issues API calls from inside a browser
-   context (`src/browser-transport.ts`) that has solved the challenge. It also means **run this from
-   a network in the country you are ordering in** — a local consumer connection works; a datacenter
-   or foreign residential IP is likely to be challenged. Failures report this cause explicitly
-   instead of pretending the session expired.
+1. **PerimeterX.** See [Getting past PerimeterX](#getting-past-perimiterx--the-part-that-matters):
+   the browser must look human (headed, on Xvfb), a challenge poisons the profile until it is reset,
+   and repeated challenges from one IP mean you need `FOODPANDA_PROXY` or another host.
 2. **Apollo hashes** must be harvested per region (see above) before search works.
 3. **Payment.** Checkout is implemented for cash on delivery. Card payments go through foodpanda's
    Adyen flow in a browser and are **not** supported here.

@@ -166,13 +166,7 @@ export class FoodpandaClient {
   // ----------------------------------------------------------------
 
   private commonHeaders(): Record<string, string> {
-    if (!this.sessionToken) {
-      throw new Error(
-        "No session token configured. Please call the refresh_token tool to log in."
-      );
-    }
-    return {
-      Authorization: `Bearer ${this.sessionToken}`,
+    const headers: Record<string, string> = {
       "x-fp-api-key": "volo",
       "User-Agent":
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
@@ -180,6 +174,14 @@ export class FoodpandaClient {
       "perseus-client-id": this.perseusClientId,
       "perseus-session-id": this.perseusSessionId,
     };
+
+    // Browsing (search, menus, vendor details) is public: the storefront itself calls these
+    // endpoints before anyone logs in. Only cart and checkout need the bearer token, so a
+    // missing token is no longer a hard failure — the API answers per endpoint.
+    if (this.sessionToken) {
+      headers.Authorization = `Bearer ${this.sessionToken}`;
+    }
+    return headers;
   }
 
   /**

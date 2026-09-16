@@ -30,12 +30,15 @@ console.error(
     `locale=${cfg.locale} currency=${cfg.currency} transport=${cfg.browserTransport ? "browser" : "fetch"}`
 );
 
-if (!cfg.searchHash || !cfg.vendorListHash) {
+const missing: string[] = [];
+if (!cfg.searchHash) missing.push("FOODPANDA_GQL_SEARCH_HASH (search_restaurants)");
+if (!cfg.vendorListHash) missing.push("FOODPANDA_GQL_VENDOR_LIST_HASH (list_outlets)");
+if (missing.length > 0) {
   console.error(
-    "foodpanda-mcp: WARNING — GraphQL persisted-query hashes are missing for this region.\n" +
-      "  search_restaurants / list_outlets will fail until you harvest them:\n" +
-      "  node scripts/discover-hashes.mjs   (run from a network foodpanda serves)\n" +
-      "  then export FOODPANDA_GQL_SEARCH_HASH / FOODPANDA_GQL_VENDOR_LIST_HASH"
+    `foodpanda-mcp: note — not set: ${missing.join(", ")}.\n` +
+      "  Those Apollo persisted-query hashes are needed before the matching tool works.\n" +
+      "  Harvest them from a browser that clears PerimeterX:\n" +
+      "  FOODPANDA_COUNTRY=hk FOODPANDA_HEADLESS=0 node scripts/discover-hashes.mjs"
   );
 }
 
@@ -43,7 +46,8 @@ if (sessionToken) {
   console.error("foodpanda-mcp: loaded session token");
 } else {
   console.error(
-    "foodpanda-mcp: no session token found. Use the refresh_token tool to log in."
+    "foodpanda-mcp: no session token — browsing works (search, menus, details); " +
+      "cart and checkout need a login via the refresh_token tool."
   );
 }
 
