@@ -151,6 +151,31 @@ you meet), and the Bearer token the page sends to fd-api is captured and stored 
 On a headless server set `FOODPANDA_HEADLESS=1` and expect to complete the login interactively on a
 machine that has a screen, then copy `token.json` plus the `browser-data` profile across.
 
+### Logging in on a server (no screen) — what actually works
+
+`scripts/login-browser.sh` starts a **visible** Chromium on a virtual display that owns the MCP's
+browser profile, so a login performed there is the login the server later orders with. It also
+exposes CDP and points `$HERMES_HOME/chrome-debug` at that profile, which is the directory Hermes'
+own browser tooling probes — so `browser_exec` attaches to *this* window instead of launching its
+own headless browser (a headless one is refused by PerimeterX, which is the whole point).
+
+```bash
+FOODPANDA_BROWSER_EXECUTABLE=/path/to/chrome \
+FOODPANDA_LOGIN_PROFILE="$HERMES_HOME/chrome-debug" \
+  scripts/login-browser.sh          # Ctrl-C is fine; stop with: scripts/login-browser.sh --stop
+```
+
+Then, from the agent: navigate to `https://www.foodpanda.hk/login`, type the account e-mail, and let
+`browser_vault_save_login` / `browser_vault_fill` supply the password (it is typed by the vault, never
+by the agent, and never appears in the conversation). After the session is established, the MCP's
+own `refresh_token` tool picks the bearer token out of the profile.
+
+**Known blocker: foodpanda's two-factor screen.** Its OTP is four separate single-digit inputs, and
+the vault fills one field per entry — so an e-mail OTP cannot be delivered into that form. Nor does
+the verification e-mail carry a link to click. Practical answers: disable 2FA on the account while
+you set the session up (then re-enable it), or do the login on a machine where you can see the
+screen. Password-only login (no 2FA) works end to end with the steps above.
+
 ## Harvest the region's hashes
 
 `search_restaurants` and `list_outlets` call Apollo **persisted queries**: instead of sending a
