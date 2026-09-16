@@ -62,6 +62,7 @@ export class BrowserTransport {
       try {
         const ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
           headless: cfg.headless,
+          ...(cfg.browserChannel ? { channel: cfg.browserChannel } : {}),
           viewport: { width: 1280, height: 900 },
           args: ["--no-sandbox", "--disable-dev-shm-usage"],
         });

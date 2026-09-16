@@ -31,6 +31,12 @@ export interface RegionConfig {
   browserTransport: boolean;
   /** Run the transport/login browser headless (server use) or headed (desktop use). */
   headless: boolean;
+  /**
+   * Chromium build to drive. "chromium" = the full build (new headless mode), which
+   * avoids Playwright's separate chromium-headless-shell download; set to "" to let
+   * Playwright pick (headless then needs the headless-shell build).
+   */
+  browserChannel: string;
 }
 
 /**
@@ -108,6 +114,10 @@ export function loadRegionConfig(): RegionConfig {
     vendorListHash: process.env.FOODPANDA_GQL_VENDOR_LIST_HASH || preset.vendorListHash || "",
     browserTransport: envFlag("FOODPANDA_BROWSER_TRANSPORT", true),
     headless: envFlag("FOODPANDA_HEADLESS", true),
+    browserChannel:
+      process.env.FOODPANDA_BROWSER_CHANNEL === undefined
+        ? "chromium"
+        : process.env.FOODPANDA_BROWSER_CHANNEL.trim(),
   };
 }
 

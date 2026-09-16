@@ -43,8 +43,13 @@ git clone https://github.com/vienneje/foodpanda-mcp-hk.git
 cd foodpanda-mcp-hk
 npm install --ignore-scripts     # --ignore-scripts skips the bundled Chrome download
 npx tsc -p tsconfig.json         # produces build/
-npx playwright install chromium  # install the browser the transport drives
+npx playwright install chromium  # the full Chromium build, used in new-headless mode
 ```
+
+The transport launches Chromium with `channel: "chromium"` (the full build, new headless mode),
+so Playwright's separate `chromium-headless-shell` download is not needed. If you prefer the
+headless shell, set `FOODPANDA_BROWSER_CHANNEL=` (empty) and run
+`npx playwright install chromium-headless-shell` instead.
 
 ### 2. Hermes Agent
 
@@ -117,6 +122,7 @@ foodpanda-mcp: region=foodpanda Hong Kong api=https://hk.fd-api.com web=https://
 | `FOODPANDA_GQL_VENDOR_LIST_HASH` | unset | Apollo hash used by `list_outlets` |
 | `FOODPANDA_BROWSER_TRANSPORT` | `1` | route API calls through the browser context |
 | `FOODPANDA_HEADLESS` | `1` | run the transport/login browser headless |
+| `FOODPANDA_BROWSER_CHANNEL` | `chromium` | Chromium build to drive; empty = Playwright default (headless shell) |
 | `FOODPANDA_STATE_DIR` | `~/.foodpanda-mcp` | token + browser profile location |
 | `FOODPANDA_SESSION_TOKEN` | unset | JWT, if you prefer to supply one instead of logging in |
 

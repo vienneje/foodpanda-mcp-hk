@@ -77,6 +77,9 @@ pw.chromium.use(stealthModule.default());
 mkdirSync(PROFILE_DIR, { recursive: true, mode: 0o700 });
 const context = await pw.chromium.launchPersistentContext(PROFILE_DIR, {
   headless: HEADLESS,
+  ...(process.env.FOODPANDA_BROWSER_CHANNEL === ""
+    ? {}
+    : { channel: process.env.FOODPANDA_BROWSER_CHANNEL || "chromium" }),
   viewport: { width: 1280, height: 900 },
   args: ["--no-sandbox", "--disable-dev-shm-usage"],
 });
