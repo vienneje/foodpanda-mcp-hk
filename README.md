@@ -123,6 +123,7 @@ foodpanda-mcp: region=foodpanda Hong Kong api=https://hk.fd-api.com web=https://
 | `FOODPANDA_BROWSER_TRANSPORT` | `1` | route API calls through the browser context |
 | `FOODPANDA_HEADLESS` | `1` | run the transport/login browser headless |
 | `FOODPANDA_BROWSER_CHANNEL` | `chromium` | Chromium build to drive; empty = Playwright default (headless shell) |
+| `FOODPANDA_BROWSER_EXECUTABLE` | unset | absolute path to a browser binary to drive instead (system Chrome/Chromium, or an existing Playwright build) |
 | `FOODPANDA_STATE_DIR` | `~/.foodpanda-mcp` | token + browser profile location |
 | `FOODPANDA_SESSION_TOKEN` | unset | JWT, if you prefer to supply one instead of logging in |
 

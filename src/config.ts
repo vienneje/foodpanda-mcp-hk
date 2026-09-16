@@ -37,6 +37,12 @@ export interface RegionConfig {
    * Playwright pick (headless then needs the headless-shell build).
    */
   browserChannel: string;
+  /**
+   * Explicit browser binary to drive (system Chrome/Chromium or an already-installed
+   * Playwright build). When set, it wins over browserChannel and Playwright skips its
+   * own revision checks.
+   */
+  browserExecutable: string;
 }
 
 /**
@@ -118,6 +124,7 @@ export function loadRegionConfig(): RegionConfig {
       process.env.FOODPANDA_BROWSER_CHANNEL === undefined
         ? "chromium"
         : process.env.FOODPANDA_BROWSER_CHANNEL.trim(),
+    browserExecutable: (process.env.FOODPANDA_BROWSER_EXECUTABLE || "").trim(),
   };
 }
 
