@@ -82,6 +82,7 @@ const context = await pw.chromium.launchPersistentContext(PROFILE_DIR, {
     : process.env.FOODPANDA_BROWSER_CHANNEL === ""
       ? {}
       : { channel: process.env.FOODPANDA_BROWSER_CHANNEL || "chromium" }),
+  ...(process.env.FOODPANDA_PROXY ? { proxy: { server: process.env.FOODPANDA_PROXY } } : {}),
   viewport: { width: 1280, height: 900 },
   args: ["--no-sandbox", "--disable-dev-shm-usage"],
 });

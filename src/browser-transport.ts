@@ -31,6 +31,21 @@ interface BrowserLike {
   launchPersistentContext: (dir: string, options: Record<string, unknown>) => Promise<any>;
 }
 
+/** Playwright proxy object from a URL string ("", http://h:p, socks5://u:p@h:p). */
+export function proxyOptions(url: string): { server: string; username?: string; password?: string } | undefined {
+  if (!url) return undefined;
+  try {
+    const u = new URL(url);
+    const server = `${u.protocol}//${u.host}`;
+    const opts: { server: string; username?: string; password?: string } = { server };
+    if (u.username) opts.username = decodeURIComponent(u.username);
+    if (u.password) opts.password = decodeURIComponent(u.password);
+    return opts;
+  } catch {
+    throw new Error(`FOODPANDA_PROXY is not a valid proxy URL: ${url}`);
+  }
+}
+
 export class BrowserTransport {
   private context: any = null;
   private launch: Promise<any> | null = null;
@@ -67,6 +82,7 @@ export class BrowserTransport {
             : cfg.browserChannel
               ? { channel: cfg.browserChannel }
               : {}),
+          ...(proxyOptions(cfg.proxy) ? { proxy: proxyOptions(cfg.proxy) } : {}),
           viewport: { width: 1280, height: 900 },
           args: ["--no-sandbox", "--disable-dev-shm-usage"],
         });

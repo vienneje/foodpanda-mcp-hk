@@ -124,6 +124,7 @@ foodpanda-mcp: region=foodpanda Hong Kong api=https://hk.fd-api.com web=https://
 | `FOODPANDA_HEADLESS` | `1` | run the transport/login browser headless |
 | `FOODPANDA_BROWSER_CHANNEL` | `chromium` | Chromium build to drive; empty = Playwright default (headless shell) |
 | `FOODPANDA_BROWSER_EXECUTABLE` | unset | absolute path to a browser binary to drive instead (system Chrome/Chromium, or an existing Playwright build) |
+| `FOODPANDA_PROXY` | unset | proxy the browser egresses through: `socks5://host:port`, `http://host:port`, or `http://user:pass@host:port` |
 | `FOODPANDA_STATE_DIR` | `~/.foodpanda-mcp` | token + browser profile location |
 | `FOODPANDA_SESSION_TOKEN` | unset | JWT, if you prefer to supply one instead of logging in |
 
@@ -182,6 +183,32 @@ cart and checkout) use plain REST endpoints and need no hashes.
 | `preview_order` | order summary: items, totals, address, payment methods |
 | `place_order` | submits the order (after your confirmation) |
 | `refresh_token` | browser login, captures and persists the session token |
+
+## Running from a blocked network
+
+PerimeterX judges the **network**, so a server sitting on an IP foodpanda dislikes will be challenged
+no matter how good its credentials are. Two ways out:
+
+1. **Run the server where the network is fine** — a machine in the country you order in, on an
+   ordinary consumer connection. This is the intended setup: the login browser is visible, so you can
+   complete CAPTCHA/OTP yourself.
+2. **Give the server a route through an unblocked network.** Because every API call goes through the
+   browser context, pointing `FOODPANDA_PROXY` at a proxy is enough to move all traffic:
+
+   ```bash
+   # on a machine whose network reaches foodpanda (e.g. your laptop), share it as a SOCKS proxy
+   ssh -N -D 1080 user@the-server-running-the-mcp
+   # then, in the MCP env:
+   FOODPANDA_PROXY=socks5://127.0.0.1:1080
+   ```
+
+   The browser then exits through the other machine's connection and the challenge is normally not
+   raised. Note that a proxy fixes the *transport*, not the *login*: whichever way you route, the
+   session token still has to be produced by a browser where you typed your credentials, so
+   `refresh_token` remains an interactive step.
+
+A token on its own will not rescue a blocked network — a request carrying a valid bearer still gets
+`403 px-captcha` from a challenged IP.
 
 ## Order safety
 

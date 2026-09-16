@@ -43,6 +43,13 @@ export interface RegionConfig {
    * own revision checks.
    */
   browserExecutable: string;
+  /**
+   * Proxy for the browser (and therefore for every API call, since API calls run through
+   * the browser context). Accepts Playwright proxy syntax: http://host:port,
+   * socks5://host:port, or http://user:pass@host:port. Use this to egress through a
+   * network foodpanda serves when the machine running the server is blocked.
+   */
+  proxy: string;
 }
 
 /**
@@ -125,6 +132,7 @@ export function loadRegionConfig(): RegionConfig {
         ? "chromium"
         : process.env.FOODPANDA_BROWSER_CHANNEL.trim(),
     browserExecutable: (process.env.FOODPANDA_BROWSER_EXECUTABLE || "").trim(),
+    proxy: (process.env.FOODPANDA_PROXY || "").trim(),
   };
 }
 
